@@ -1,0 +1,110 @@
+# This workflow will build a docker container, publish it to Azure Container Registry, and deploy it to Azure Kubernetes Service using a helm chart.
+#
+# https://github.com/Azure/actions-workflow-samples/tree/master/Kubernetes
+#
+# To configure this workflow:
+#
+# 1. Set up the following secrets in your workspace:
+#     a. REGISTRY_USERNAME with ACR username
+#     b. REGISTRY_PASSWORD with ACR Password
+#     c. AZURE_CREDENTIALS with the output of `az ad sp create-for-rbac --sdk-auth`
+#
+# 2. Change the values for the REGISTRY_NAME, CLUSTER_NAME, CLUSTER_RESOURCE_GROUP and NAMESPACE environment variables (below).
+name: release
+on:
+  release:
+    types: [published]
+
+# Environment variables available to all jobs and steps in this workflow
+env:
+  REGISTRY_NAME: k8scc01covidacr
+  CLUSTER_NAME: k8s-cancentral-01-covid-aks
+  CLUSTER_RESOURCE_GROUP: k8s-cancentral-01-covid-aks
+  STORAGE_ACCOUNT_NAME: k8scovid
+  NAMESPACE: web
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - uses: azure/aks-set-context@v1
+      with:
+        creds: '${{ secrets.AZURE_CREDENTIALS }}'
+        cluster-name: ${{ env.CLUSTER_NAME }}
+        resource-group: ${{ env.CLUSTER_RESOURCE_GROUP }}
+    # Clone the Helm chart
+    - run: |
+        git clone https://github.com/statcan/charts.git
+        mkdir -p /home/runner/work/_temp/_github_home/
+        cp $KUBECONFIG /home/runner/work/_temp/_github_home/KUBECONFIG
+    # Deploy Helm chart
+    - uses: 'sylus/helm@master'
+      env:
+        KUBECONFIG: /github/home/KUBECONFIG
+      with:
+        release: 'pachyderm'
+        namespace: 'pachyderm'
+        tiller-namespace: 'pachyderm'
+        chart: './charts/stable/pachyderm'
+        token: '${{ github.token }}'
+        values: |
+          credentials: microsoft
+          microsoft:
+            id: "${{ secrets.PACHYDERM_STORAGE_NAME }}"
+            container: "${{ secrets.PACHYDERM_STORAGE_CONTAINER }}"
+            secret: "${{ secrets.PACHYDERM_STORAGE_KEY }}"
+          s3:
+            accessKey: "${{ secrets.PACHYDERM_STORAGE_NAME }}"
+            secretkey: "${{ secrets.PACHYDERM_STORAGE_KEY }}"
+            bucketName: "${{ secrets.PACHYDERM_STORAGE_CONTAINER }}"
+            endpoint: "pachyderm.minio.svc.cluster.local:9000"
+            secure: "0"
+            signature: "1"
+          dash:
+            ingress:
+              enabled: true
+              hostName: "pachyderm.${{ secrets.DOMAIN_NAME }}"
+              annotations:
+                kubernetes.io/ingress.class: istio
+              path: "/*"
+            image:
+              repository: pachyderm/dash
+              tag: 0.5.48
+            proxy:
+              image:
+                repository: pachyderm/grpc-proxy
+                tag: 0.4.9
+              resources:
+                requests:
+                  cpu: 1000m
+                  memory: 2048M
+            resources:
+              requests:
+                cpu: 1000m
+                memory: 2048M
+          pachd:
+            pfsCache: 1G
+            image:
+              repository: pachyderm/pachd
+              tag: 1.10.2
+            worker:
+              repository: pachyderm/worker
+              tag: 1.10.2
+            resources:
+              requests:
+                cpu: 1000m
+                memory: 2048M
+          etcd:
+            image:
+              repository: quay.io/coreos/etcd
+              tag: v3.3.5
+            persistence:
+              enabled: true
+              size: 60G
+            resources:
+              requests:
+                cpu: 1000m
+                memory: 2048M
+          destinationRule:
+            enabled: true
+            mode: DISABLE

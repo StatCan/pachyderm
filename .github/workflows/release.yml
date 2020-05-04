@@ -89,10 +89,10 @@ jobs:
             pfsCache: 1G
             image:
               repository: pachyderm/pachd
-              tag: 1.10.2
+              tag: 1.10.3
             worker:
               repository: pachyderm/worker
-              tag: 1.10.2
+              tag: 1.10.3
             resources:
               requests:
                 cpu: 1000m

@@ -47,7 +47,6 @@ jobs:
       with:
         release: 'pachyderm'
         namespace: 'pachyderm'
-        tillerNamespace: 'pachyderm'
         chart: './charts/stable/pachyderm'
         token: '${{ github.token }}'
         values: |
